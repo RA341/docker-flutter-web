@@ -1,31 +1,45 @@
-# Use the latest 2.1 version of CircleCI pipeline process engine.
-# See: https://circleci.com/docs/reference/configuration-reference
 version: 2.1
 
-# Define a job to be invoked later in a workflow.
-# See: https://circleci.com/docs/guides/orchestrate/jobs-steps/#jobs-overview & https://circleci.com/docs/reference/configuration-reference/#jobs
 jobs:
-  say-hello:
-    # Specify the execution environment. You can specify an image from Docker Hub or use one of our convenience images from CircleCI's Developer Hub.
-    # See: https://circleci.com/docs/guides/execution-managed/executor-intro/ & https://circleci.com/docs/reference/configuration-reference/#executor-job
+  build-docker-image:
     docker:
-      # Specify the version you desire here
-      # See: https://circleci.com/developer/images/image/cimg/base
       - image: cimg/base:current
-
-    # Add steps to the job
-    # See: https://circleci.com/docs/guides/orchestrate/jobs-steps/#steps-overview & https://circleci.com/docs/reference/configuration-reference/#steps
     steps:
-      # Checkout the code as the first step.
       - checkout
+      - setup_remote_docker:
+          version: default
+          docker_layer_caching: true
       - run:
-          name: "Say hello"
-          command: "echo Hello, World!"
-
-# Orchestrate jobs using workflows
-# See: https://circleci.com/docs/guides/orchestrate/workflows/ & https://circleci.com/docs/reference/configuration-reference/#workflows
+          name: "Build Docker Image"
+          command: |
+            IMAGE_NAME=ghcr.io/${GITHUB_USERNAME}/${GITHUB_REPO}
+            docker build -t ${IMAGE_NAME}:${CIRCLE_SHA1} .
+            docker tag ${IMAGE_NAME}:${CIRCLE_SHA1} ${IMAGE_NAME}:latest
+      - run:
+          name: "Login to GitHub Container Registry"
+          command: echo "$GITHUB_TOKEN" | docker login ghcr.io -u $GITHUB_USERNAME --password-stdin
+      - run:
+          name: "Push Docker Image to GHCR"
+          command: |
+            IMAGE_NAME=ghcr.io/${GITHUB_USERNAME}/${GITHUB_REPO}
+            docker push ${IMAGE_NAME}:${CIRCLE_SHA1}
+            docker push ${IMAGE_NAME}:latest
+            
 workflows:
-  say-hello-workflow: # This is the name of the workflow, feel free to change it to better match your workflow.
-    # Inside the workflow, you define the jobs you want to run.
+  # Build and push Docker image on every commit
+  build-workflow:
     jobs:
-      - say-hello
+      - build-docker-image
+
+  # Scheduled workflow that runs daily
+  daily-build:
+    triggers:
+      - schedule:
+          # Run at 9:00 AM UTC every day
+          cron: "0 9 * * *"
+          filters:
+            branches:
+              only:
+                - main
+    jobs:
+      - build-docker-image
