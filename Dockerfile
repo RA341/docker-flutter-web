@@ -1,15 +1,13 @@
-FROM ubuntu:latest AS flutter_builder
+FROM debian:13-slim AS flutter_builder
 
-# Install necessary dependencies
+ENV DEBIAN_FRONTEND=noninteractive
+
 RUN apt-get update && apt-get install -y \
-    curl \
     git \
+    curl \
     unzip \
-    openjdk-17-jre-headless \
+    xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Download and install Flutter SDK
-RUN git clone https://github.com/flutter/flutter.git /opt/flutter
-ENV PATH="/opt/flutter/bin:${PATH}"
-
-RUN flutter precache --web
+RUN git clone https://github.com/flutter/flutter.git -b stable /flutter
+ENV PATH="/flutter/bin:${PATH}"
