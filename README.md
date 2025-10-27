@@ -6,6 +6,7 @@ Features
 
 * Only supports web builds
 * mimimal depedencies
+  * atleast it tries to be flutter is huge
 * automatically rebuilt weekly
 * Arm64 and x86-64 support
 
