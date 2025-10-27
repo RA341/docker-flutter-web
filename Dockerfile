@@ -13,4 +13,7 @@ RUN git clone https://github.com/flutter/flutter.git -b stable /flutter
 
 ENV PATH="/flutter/bin:${PATH}"
 
-RUN flutter precache linux web
+RUN flutter precache web
+
+RUN flutter --disable-analytics  \
+    flutter config --no-cli-animations

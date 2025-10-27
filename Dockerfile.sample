@@ -1,0 +1,17 @@
+FROM ghcr.io/ra341/dfw:dev AS flutter_builder
+
+WORKDIR /app
+
+COPY sample/pubspec.* .
+
+RUN flutter pub get
+
+COPY sample .
+
+RUN flutter build web --wasm
+
+FROM nginx:alpine-slim
+
+COPY --from=flutter_builder /app/build/web /usr/share/nginx/html
+
+EXPOSE 80

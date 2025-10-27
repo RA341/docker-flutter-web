@@ -1,0 +1,14 @@
+version: 3
+env:
+  IMAGE: ghcr.io/ra341/dfw:dev
+  SAMPLE: dfw-sample:dev
+
+tasks:
+  sam:
+    deps:
+      - dk
+    cmds:
+      - docker build -f Dockerfile.sample . -t {{ .SAMPLE }}
+  dk:
+    cmds:
+      - docker build . -t {{ .IMAGE }}
