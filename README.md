@@ -2,6 +2,8 @@
 
 Prebuilt Docker image to build Flutter web apps
 
+Only
+
 Features
 
 * Only supports web builds
