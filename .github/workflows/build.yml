@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - Dockerfile      
+      - Dockerfile
 
   schedule:
     - cron: '0 0 * * 0'  # Every Sunday at midnight UTC
@@ -57,18 +57,22 @@ jobs:
 
       - name: Set Docker Hub image (optional)
         id: dockerhub
+        env:
+          DOCKERHUB_REPO: ${{ secrets.DOCKERHUB_REPOSITORY }}
         run: |
-          # DOCKERHUB_REPOSITORY should be set as a secret (e.g. "myuser/docker-flutter-web")
-          if [ -n "${{ secrets.DOCKERHUB_REPOSITORY }}" ]; then
-            v="${{ secrets.DOCKERHUB_REPOSITORY }}"
-            # lowercase and output
-            echo "docker_image=$(echo $v | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          if [ -n "$DOCKERHUB_REPO" ]; then
+            echo "docker_image=$(echo "$DOCKERHUB_REPO" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
           else
             echo "docker_image=" >> $GITHUB_OUTPUT
           fi
 
+      - name: Pull existing image for cache
+        continue-on-error: true
+        run: |
+          docker pull ${{ steps.lowercase.outputs.image }}:${{ matrix.arch_suffix }} || true
+
       - name: Log in to Docker Hub (if configured)
-        if: ${{ secrets.DOCKERHUB_USERNAME && secrets.DOCKERHUB_TOKEN && steps.dockerhub.outputs.docker_image != '' }}
+        if: steps.dockerhub.outputs.docker_image != ''
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -80,8 +84,7 @@ jobs:
           GH_IMAGE=${{ steps.lowercase.outputs.image }}:${{ matrix.arch_suffix }}
           if [ -n "${{ steps.dockerhub.outputs.docker_image }}" ]; then
             DOCKER_IMAGE="${{ steps.dockerhub.outputs.docker_image }}:${{ matrix.arch_suffix }}"
-            DELIM=$(openssl rand -hex 8)
-            printf "tags<<%s\n%s\n%s\n%s\n" "$DELIM" "$GH_IMAGE" "$DOCKER_IMAGE" "$DELIM" >> $GITHUB_OUTPUT
+            printf "tags<<EOF\n%s\n%s\nEOF\n" "$GH_IMAGE" "$DOCKER_IMAGE" >> $GITHUB_OUTPUT
           else
             printf "tags=%s\n" "$GH_IMAGE" >> $GITHUB_OUTPUT
           fi
@@ -94,8 +97,9 @@ jobs:
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           platforms: ${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.arch_suffix }}
-          cache-from: type=gha,scope=${{ matrix.arch_suffix }}
+          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha
 
   create-multiarch-manifest:
     needs: build-architectures
@@ -107,9 +111,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -125,10 +126,11 @@ jobs:
 
       - name: Set Docker Hub image (optional)
         id: dockerhub
+        env:
+          DOCKERHUB_REPO: ${{ secrets.DOCKERHUB_REPOSITORY }}
         run: |
-          if [ -n "${{ secrets.DOCKERHUB_REPOSITORY }}" ]; then
-            v="${{ secrets.DOCKERHUB_REPOSITORY }}"
-            echo "docker_image=$(echo $v | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          if [ -n "$DOCKERHUB_REPO" ]; then
+            echo "docker_image=$(echo "$DOCKERHUB_REPO" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
           else
             echo "docker_image=" >> $GITHUB_OUTPUT
           fi
@@ -148,14 +150,14 @@ jobs:
           docker buildx imagetools inspect ${{ steps.lowercase.outputs.image }}:latest
 
       - name: Log in to Docker Hub for manifest push (if configured)
-        if: ${{ secrets.DOCKERHUB_USERNAME && secrets.DOCKERHUB_TOKEN && steps.dockerhub.outputs.docker_image != '' }}
+        if: steps.dockerhub.outputs.docker_image != ''
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Create and push multi-arch manifest to Docker Hub (optional)
-        if: ${{ steps.dockerhub.outputs.docker_image != '' }}
+        if: steps.dockerhub.outputs.docker_image != ''
         run: |
           SOURCE_IMAGES=(
             "${{ steps.dockerhub.outputs.docker_image }}:amd64"
@@ -165,6 +167,6 @@ jobs:
           docker buildx imagetools create -t "${{ steps.dockerhub.outputs.docker_image }}:latest" "${SOURCE_IMAGES[@]}"
 
       - name: Inspect multi-arch image (Docker Hub) (optional)
-        if: ${{ steps.dockerhub.outputs.docker_image != '' }}
+        if: steps.dockerhub.outputs.docker_image != ''
         run: |
           docker buildx imagetools inspect ${{ steps.dockerhub.outputs.docker_image }}:latest
